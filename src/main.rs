@@ -5,6 +5,7 @@ use std::process;
 fn main() {
     // Accepting user inputed arguments from the command line
     let arg_list: Vec<String> = env::args().collect();
+    
     let arguments = Arguments::new(&arg_list).unwrap_or_else(|err| {
         println!("Error: {}", err);
         process::exit(1);
