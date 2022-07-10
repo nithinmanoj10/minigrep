@@ -1,5 +1,6 @@
 use std::error::Error;
-use std::fs;
+use std::{fs, vec};
+use colored::*;
 
 pub struct Arguments {
     pub query: String,     // Word to be searched for in the file
@@ -24,8 +25,39 @@ impl Arguments {
 
 // Logic behind the whole program
 pub fn run(arguments: Arguments) -> Result<(), Box<dyn Error>> {
-    let contents = fs::read_to_string(arguments.file_name)?;
-    println!("{}", contents);
+    let contents = fs::read_to_string(&arguments.file_name)?;
+    
+    for line in search_case_insensitive(&arguments.query, &contents) {
+        println!("{}:\t{}", format!("{}", line.0).cyan(), line.1);
+    }
 
     Ok(())
+}
+
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<(usize, &'a str)> {
+
+    let mut result: Vec<(usize, &str)> = vec![];
+
+    // Iterating through each line of contents
+    for (line_no, line) in contents.lines().into_iter().enumerate() {
+        // checking if the line contains our query
+        if line.contains(query) {
+            result.push((line_no+1, line));
+        }
+    }
+
+    result
+}
+
+pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<(usize, &'a str)> {
+    let query = query.to_lowercase();
+    let mut result: Vec<(usize, &str)> = vec![];
+
+    for (line_no, line) in contents.lines().into_iter().enumerate() {
+        if line.to_lowercase().contains(&query) {
+            result.push((line_no+1, line));
+        }
+    }
+    
+    result
 }
