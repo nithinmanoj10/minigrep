@@ -1,4 +1,4 @@
-use minigrep::Arguments;
+use minigrep_npm::Arguments;
 use std::env;
 use std::process;
 
@@ -11,7 +11,7 @@ fn main() {
         process::exit(1);
     });
 
-    if let Err(e) = minigrep::run(arguments) {
+    if let Err(e) = minigrep_npm::run(arguments) {
         println!("Error: {}", e);
         process::exit(1);
     }
