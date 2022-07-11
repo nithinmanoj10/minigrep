@@ -373,7 +373,7 @@ pub fn view_help_menu() {
 }
 
 pub fn view_version() {
-    println!("\n{}", format!("Minigrep v1.0.1").yellow().bold());
+    println!("\n{}", format!("Minigrep v1.0.0").yellow().bold());
     println!("Made by Nithin for learning purposes only");
     println!("https://github.com/nithinmanoj10/minigrep")
 }
