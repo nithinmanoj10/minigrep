@@ -1,6 +1,7 @@
 use colored::*;
 use std::error::Error;
 use std::{fs, vec};
+use std::collections::HashMap;
 
 pub struct Arguments {
     pub query: String,      // Word to be searched for in the file
@@ -10,6 +11,9 @@ pub struct Arguments {
     pub case_ignore: bool,  // Option set to ignore cases
     pub line_number: bool,  // Option to view line numbers
     pub query_count: bool,  // Option to view count of query occurences
+    pub non_match: bool,    // Option to view non matching lines
+    pub line_count: bool,   // Option to view total line count containing query
+    pub view_stats: bool,   // Option to view file stats
 }
 
 pub struct LineInfo<'a> {
@@ -20,6 +24,7 @@ pub struct LineInfo<'a> {
 pub struct SearchResult<'a> {
     pub line_info: Vec<LineInfo<'a>>,
     pub count: usize,
+    pub line_count: usize,
 }
 
 impl Default for Arguments {
@@ -32,6 +37,9 @@ impl Default for Arguments {
             case_ignore: false,
             line_number: false,
             query_count: false,
+            non_match: false,
+            line_count: false,
+            view_stats: false,
         }
     }
 }
@@ -61,7 +69,17 @@ impl Arguments {
                         ..Default::default()
                     });
                 }
-            } else {
+            } 
+            else if args[2].eq("-S") || args[2].eq("--stats") {
+                // possible command:
+                // cargo run war_and_peace.txt -S
+                return Ok(Arguments {
+                    file_name: args[1].clone(),
+                    view_stats: true,
+                    ..Default::default()  
+                });
+            }
+            else {
                 //possible command:
                 // cargo run hello hello_world.txt
                 return Ok(Arguments {
@@ -100,8 +118,17 @@ impl Arguments {
             {
                 argument.query_count = true;
             }
-            else {
-                return error_message;
+
+            if option_list.contains(&"-lc".to_string())
+                || option_list.contains(&"--line-count".to_string())
+            {
+                argument.line_count = true;
+            }
+
+            if option_list.contains(&"-I".to_string())
+                || option_list.contains(&"--invert-match".to_string())
+            {
+                argument.non_match = true;
             }
 
             return Ok(argument);
@@ -125,12 +152,22 @@ pub fn run(arguments: Arguments) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    // if the user wants to view file stats
+    if arguments.view_stats {
+        view_file_stats(arguments);
+        return Ok(());
+    }
+
     let contents = fs::read_to_string(&arguments.file_name)?;
     println!("\n{}", format!("{}:", &arguments.file_name).yellow());
 
     let search_result = if arguments.case_ignore {
         search_case_insensitive(&arguments.query, &contents)
-    } else {
+    } 
+    else if arguments.non_match {
+        search_invert_match(&arguments.query, &contents)
+    }
+    else {
         search(&arguments.query, &contents)
     };
 
@@ -153,15 +190,23 @@ pub fn run(arguments: Arguments) -> Result<(), Box<dyn Error>> {
 
     // Printing query occurence count
     if arguments.query_count {
-        println!("{}", format!("\nCount: {}\n", search_result.count).green().bold());
+        println!("{}", format!("\nCount: {}", search_result.count).green().bold());
+    }
+    else {
+        println!("");
     }
 
+    // Printing line count
+    if arguments.line_count {
+        println!("{}", format!("Line count: {}\n", search_result.line_count).green().bold());
+    }
     Ok(())
 }
 
 pub fn search<'a>(query: &str, contents: &'a str) -> SearchResult<'a> {
     let mut line_info: Vec<LineInfo> = vec![];
     let mut count = 0;
+    let mut line_count = 0;
 
     // Iterating through each line of contents
     for (line_no, line) in contents.lines().into_iter().enumerate() {
@@ -172,16 +217,18 @@ pub fn search<'a>(query: &str, contents: &'a str) -> SearchResult<'a> {
                 line_content: line,
             });
             count += line.matches(query).count();
+            line_count += 1;
         }
     }
 
-    SearchResult { line_info, count}
+    SearchResult { line_info, count, line_count}
 }
 
 pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> SearchResult<'a> {
     let query = query.to_lowercase();
     let mut line_info: Vec<LineInfo> = vec![];
     let mut count = 0;
+    let mut line_count = 0;
 
     // Iterating through each line of contents
     for (line_no, line) in contents.lines().into_iter().enumerate() {
@@ -192,10 +239,61 @@ pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> SearchResu
                 line_content: line,
             });
             count += line.to_ascii_lowercase().matches(&query).count();
+            line_count += 1;
         }
     }
 
-    SearchResult { line_info, count}
+    SearchResult { line_info, count, line_count}
+}
+
+pub fn search_invert_match<'a>(query: &str, contents: &'a str) -> SearchResult<'a> {
+    let mut line_info: Vec<LineInfo> = vec![];
+    let mut line_count = 0;
+
+    // Iterating through each line of contents
+    for (line_no, line) in contents.lines().into_iter().enumerate() {
+        // checking if the line contains our query
+        if !line.contains(query) {
+            line_info.push(LineInfo {
+                line_number: line_no,
+                line_content: line,
+            });
+            line_count += 1;
+        }
+    }
+
+    SearchResult { line_info, count: 0, line_count}
+}
+
+pub fn view_file_stats(arguments: Arguments) {
+    let contents = fs::read_to_string(&arguments.file_name).expect("Unknown File");
+    let contents = contents.to_lowercase();
+    let words_list: Vec<&str> = contents.split_whitespace().collect();
+    let mut word_count = HashMap::new();
+    let mut char_count = 0;
+    let mut line_count = 0;
+
+    for _line in contents.lines().into_iter() {
+        line_count += 1;
+    }
+
+    println!("\n{}\n", format!("{}", arguments.file_name).yellow().bold());
+
+    for word in words_list {
+        let count = word_count.entry(word).or_insert(0);
+        *count += 1;
+    }
+
+    println!("{}", format!("{0: <10} | {1: <10}", "Sequence", "Frequency").bold());
+    println!("{}", format!("----------------------").bold());
+
+    for (word, frequency) in word_count {
+        println!("{0: <10} {1} {2: <10}", word, format!("|").bold(), frequency);
+        char_count += word.len();
+    }
+
+    println!("\n{}", format!("{}: {}", "Character count", char_count).bold());
+    println!("{}\n", format!("{}: {}", "Line count", line_count).bold());
 }
 
 pub fn view_help_menu() {
@@ -237,12 +335,40 @@ pub fn view_help_menu() {
         "{}\toutput total occurences of query \t'cargo run butter recipe.txt -c'",
         format!("   -c, --query-count").blue().bold()
     );
+
+    // Line Occurence Count
+    println!(
+        "{}\toutput total lines containing query \t'cargo run phone devices.txt -lc'",
+        format!("   -lc, --line-count").blue().bold()
+    );
+
+    // Invert Match
+    println!(
+        "{}\toutput non-matching lines \t\t'cargo run puppy pets.txt -I'",
+        format!("   -I, --invert-match").blue().bold()
+    );
+
     // ---- MISCELLANEOUS ----
 
     println!("{}", format!("\nMiscellaneous:").yellow().bold());
+
+    // Display file stats
+    println!(
+        "{}\t\tdisplays file statistics\t\t'cargo run war_and_peace.txt -S'",
+        format!("   -S, --stats").blue().bold()
+    );
+
+
+    // Display version
     println!(
         "{}\tdisplays version information\t\t'cargo run minigrep -v'",
         format!("   -v, --version").blue().bold()
+    );
+
+    // Display help menu
+    println!(
+        "{}\tdisplays help menu\t\t\t'cargo run minigrep_help'",
+        format!("   minigrep_help").blue().bold()
     );
 }
 
